@@ -404,6 +404,7 @@ let month = 'all', memOpen = null, imgRot = 0, imgZ = 1;
 let lastSum = '';
 let lastStatus = {}, deferredPrompt = null;
 let notes = [];
+let openAdminNext = false;
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -557,7 +558,8 @@ auth.onAuthStateChanged(async user => {
     render();
   }, () => {}));
   resetForm();
-  go('home');
+  go(openAdminNext && isMgr ? 'admin' : 'home');
+  openAdminNext = false;
 });
 
 /* ================= NAV ================= */
@@ -573,7 +575,7 @@ const PAGES = { home: 'pgHome', entries: 'pgEntries', settings: 'pgSettings', ad
 function renderNav() {
   const keys = ['home', 'entries'];
   keys.push('settings');
-  if (isMgr) keys.push('admin');
+  keys.push('admin');
   $('nav').style.gridTemplateColumns = `repeat(${keys.length},1fr)`;
   const pend = isMgr ? entries.filter(x => x.status !== 'approved').length : 0;
   $('nav').innerHTML = keys.map(k =>
@@ -594,7 +596,7 @@ document.addEventListener('touchend', () => {
 }, { passive: true });
 
 function go(p) {
-  if (p === 'admin' && !isMgr) p = 'home';
+  if (p === 'admin' && !isMgr) { unlockAdmin(); return; }
   page = p;
   Object.entries(PAGES).forEach(([k, id]) => $(id).classList.toggle('hidden', k !== p));
   render();
@@ -631,6 +633,19 @@ function renderNotes() {
       ${canDel ? `<button class="ghost" style="margin-top:6px;min-height:32px;font-size:12.5px" onclick="delNote('${esc(n.id)}')">${t('del')}</button>` : ''}
     </div>`;
   }).join('') : `<div class="sub" style="padding:8px 0">${isBn ? 'এখনো কোনো নোট নেই' : 'No notes yet'}</div>`;
+}
+/* Members see the Admin tab; opening it asks for the admin password. Signing in as admin
+   switches this device to the admin account (Firebase checks the password; wrong password changes nothing). */
+async function unlockAdmin() {
+  const pw = await sheet({ title: t('enterAdminPw'), type: 'password', raw: true });
+  if (!pw) return;
+  openAdminNext = true;
+  try {
+    await auth.signInWithEmailAndPassword(MANAGER, pw);
+  } catch (e) {
+    openAdminNext = false;
+    toast(t('wrongPw'), true);
+  }
 }
 async function postNote() {
   const el = $('noteTxt'); const text = el.value.trim();
