@@ -581,7 +581,7 @@ function renderNav() {
   $('nav').style.gridTemplateColumns = `repeat(${keys.length},1fr)`;
   const pend = isMgr ? entries.filter(x => x.status !== 'approved').length : 0;
   $('nav').innerHTML = keys.map(k =>
-    `<button class="${page === k ? 'on' : ''}" onclick="go('${k}')"><svg viewBox="0 0 24 24">${ICON[k]}</svg>${t(k)}${k === 'entries' && pend ? `<span class="dot">${pend}</span>` : ''}</button>`).join('');
+    `<button class="${page === k ? 'on' : ''}" onclick="go('${k}')"><svg viewBox="0 0 24 24">${ICON[k]}</svg>${t(k)}${k === 'admin' && pend ? `<span class="dot">${pend}</span>` : ''}</button>`).join('');
 }
 /* Pull down from the very top to refresh (works in the Home Screen app too) */
 let pY0 = 0, pDy = 0, pOn = false;
@@ -878,7 +878,7 @@ function entryRow(x) {
   } else if (locked) {
     acts = lockTxt + mgrEdit;
   } else {
-    acts = `<button class="ok" onclick="approve('${x.id}')">${t('approve')}</button><button class="warn" onclick="needFix('${x.id}')">${t('askFix')}</button>` + mgrEdit;
+    acts = mgrEdit;
   }
   const who = (isMgr || !mine) ? `<div class="sub">${esc(nameOf(x.memberEmail))}</div>` : '';
   const rs = x.status === 'needs_fix' && x.reason ? `<div style="color:var(--warn);font-size:12.5px;margin-top:4px">${t('reason')}: ${esc(x.reason)}</div>` : '';
@@ -1187,7 +1187,16 @@ function renderAdmin() {
   const typed = {};
   ['nEmail', 'nName', 'nPw'].forEach(i => { const el = $(i); if (el && el.value) typed[i] = el.value; });
 
-  let h = gh(isBn ? 'মেস' : 'Mess');
+  const pending = entries.filter(x => x.status !== 'approved').sort(byNewest);
+  let h = `<div class="card"><h3>${isBn ? `অপেক্ষমাণ এন্ট্রি (${pending.length})` : `Waiting approval (${pending.length})`}</h3>`
+    + (pending.length ? pending.map(x => `<div class="entry">${thumbFor(x)}<div class="grow">
+        <div class="row between"><b class="num">${f2(x.amount)}</b><span class="badge ${STATUS_CLS[x.status] || 'b-sub'}">${t(x.status)}</span></div>
+        <div class="sub">${esc(nameOf(x.memberEmail))} · ${fmtDate(x.date)}${x.note ? ' · ' + esc(x.note) : ''}</div>
+        ${x.reason ? `<div style="color:var(--warn);font-size:12.5px;margin-top:2px">${esc(x.reason)}</div>` : ''}
+        <div class="acts"><button class="ok" onclick="approve('${x.id}')">${t('approve')}</button><button class="warn" onclick="needFix('${x.id}')">${t('askFix')}</button><button class="bad" onclick="delEntry('${x.id}')">${t('del')}</button></div>
+      </div></div>`).join('') : `<div class="empty">${isBn ? 'কোনো অপেক্ষমাণ এন্ট্রি নেই' : 'Nothing waiting for approval'}</div>`)
+    + `</div>`;
+  h += gh(isBn ? 'মেস' : 'Mess');
   h += sec(t('management'), `
       <div class="lbl" style="margin-top:14px">${isBn ? 'ঘোষণা' : 'Notice'}</div>
       <textarea id="noticeTxt" rows="2" style="width:100%">${esc(notice)}</textarea>
