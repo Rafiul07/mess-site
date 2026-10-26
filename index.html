@@ -269,6 +269,7 @@ details.sec .secBody{margin-top:12px}
           <div class="grow"><div class="lbl" data-i18n="date"></div><input id="fDate" type="date"></div>
           <div class="grow"><div class="lbl" data-i18n="amount"></div><input id="fAmt" type="text" inputmode="decimal" placeholder="1,500"></div>
         </div>
+        <div id="fMemberBox" class="hidden"><div class="lbl" id="fMemberLbl"></div><select id="fMember"></select></div>
         <div class="lbl" data-i18n="note"></div>
         <input id="fNote">
         <div class="lbl" data-i18n="paySlip"></div>
@@ -819,6 +820,16 @@ const byNewest = (a, b) => String(b.date).localeCompare(String(a.date)) || num(b
 /* ================= ENTRIES ================= */
 function renderEntries() {
   $('formCard').classList.remove('hidden');
+  $('fMemberBox').classList.toggle('hidden', !isMgr || !!editId);
+  if (isMgr) {
+    $('fMemberLbl').innerText = lang === 'bn' ? 'কার নামে এন্ট্রি' : 'Entry for';
+    const sel = $('fMember'), key = allEmails().join(',');
+    if (sel.dataset.key !== key) {
+      const keep = sel.value || me;
+      sel.innerHTML = allEmails().map(e => `<option value="${esc(e)}">${esc(nameOf(e))}${e === me ? ' (' + (lang === 'bn' ? 'আমি' : 'me') + ')' : ''}</option>`).join('');
+      sel.value = keep; sel.dataset.key = key;
+    }
+  }
   $('filterBox').classList.remove('hidden');
   const q = $('qSearch').value.trim().toLowerCase();
   $('filterSel').innerHTML = isMgr ? `
@@ -940,7 +951,8 @@ async function saveEntry() {
       }
     } else {
       // entry first (the slip rule checks that the entry exists), then the photo
-      const ref = await db.collection('entries').add({ memberEmail: me, date, amount: amt, note, status: isMgr ? 'approved' : 'submitted', reason: '', createdAt: Date.now() });
+      const who = isMgr && $('fMember') ? $('fMember').value : me;
+      const ref = await db.collection('entries').add({ memberEmail: who, date, amount: amt, note, status: isMgr ? 'approved' : 'submitted', reason: '', createdAt: Date.now() });
       try {
         await db.collection('slips').doc(ref.id).set({ data: photo });
         slipCache[ref.id] = photo;
