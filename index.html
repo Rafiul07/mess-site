@@ -461,7 +461,7 @@ const depOf = e => { const m = memberOf(e); return m ? num(m.deposit) : 0; };
 const nameOf = e => { const m = memberOf(e); return m && m.name ? m.name : e.split('@')[0].toUpperCase(); };
 function scoped() { return month === 'all' ? entries : entries.filter(x => String(x.date).slice(0, 7) === month); }
 const bazarOf = e => scoped().filter(x => x.memberEmail === e).reduce((a, x) => a + num(x.amount), 0);
-function allEmails() { return [...new Set([...members.map(m => m.email), ...entries.map(x => x.memberEmail)])].filter(e => e !== MANAGER); }
+function allEmails() { return [...new Set([...members.map(m => m.email), ...entries.map(x => x.memberEmail)])]; }
 function calc(list = scoped()) {
   const em = allEmails();
   const tB = list.reduce((a, x) => a + num(x.amount), 0);
@@ -538,8 +538,9 @@ auth.onAuthStateChanged(async user => {
     unsubs.push(db.collection('logs').orderBy('at', 'desc').limit(30).onSnapshot(s => {
       logs = s.docs.map(d => d.data()); if (page === 'settings') render();
     }, () => {}));
-  } else {
-    // first login adds the member automatically (admin can rename / change days & deposit later)
+  }
+  {
+    // first login adds the member automatically (admin too, since admin shares costs) (admin can rename / change days & deposit later)
     db.collection('members').doc(me).get().then(s => {
       if (!s.exists) db.collection('members').doc(me).set({ email: me, name: me.split('@')[0].toUpperCase(), days: 30, deposit: 0 });
     }).catch(() => {});
@@ -707,7 +708,7 @@ function pushSummary(c) {
 
 /* ================= HOME ================= */
 function renderHome() {
-  $('qBar').classList.toggle('hidden', isMgr);
+  $('qBar').classList.remove('hidden');
   let h = '';
   if (notice) h += `<div class="card" style="border-color:var(--p)"><h3>${lang === 'bn' ? 'ঘোষণা' : 'Notice'}</h3><div>${esc(notice)}</div></div>`;
   if (isMgr) {
@@ -748,7 +749,8 @@ function renderHome() {
       </div>`;
     }).join('') + `</div>`;
     h += `<div class="card"><h3>${t('recent')}</h3>` + recentList(entries, 5, true) + `</div>`;
-  } else {
+  }
+  {
     const r = currentRate();
     const bal = r == null ? null : balOf(me, r);
     const isBn = lang === 'bn';
@@ -816,7 +818,7 @@ const byNewest = (a, b) => String(b.date).localeCompare(String(a.date)) || num(b
 
 /* ================= ENTRIES ================= */
 function renderEntries() {
-  $('formCard').classList.toggle('hidden', isMgr);
+  $('formCard').classList.remove('hidden');
   $('filterBox').classList.remove('hidden');
   const q = $('qSearch').value.trim().toLowerCase();
   $('filterSel').innerHTML = isMgr ? `
@@ -849,22 +851,23 @@ function renderEntries() {
 }
 
 function entryRow(x) {
-  const mine = isMgr || x.memberEmail === me;
+  const own = x.memberEmail === me;
+  const mine = isMgr || own;
   const locked = x.status === 'approved';
+  const lockTxt = `<span class="sub">🔒 ${t('locked')}</span>`;
+  const mgrEdit = `<button class="ghost" onclick="changeAmt('${x.id}')">${t('changeAmt')}</button><button class="bad" onclick="delEntry('${x.id}')">${t('del')}</button>`;
+  const ownEdit = `<button class="ghost" onclick="startEdit('${x.id}')">${t('edit')}</button><button class="bad" onclick="delEntry('${x.id}')">${t('del')}</button>`;
   let acts = '';
   if (isClosed(x)) {
     acts = `<span class="sub">🔒 ${lang === 'bn' ? 'মাস বন্ধ' : 'Month closed'}</span>`;
-  } else if (!mine) {
+  } else if (own) {
+    acts = locked ? lockTxt + (isMgr ? mgrEdit : '') : ownEdit;
+  } else if (!isMgr) {
     acts = '';
-  } else if (locked && !isMgr) {
-    acts = `<span class="sub">🔒 ${t('locked')}</span>`;
-  } else if (locked && isMgr) {
-    acts = `<span class="sub">🔒 ${t('locked')}</span><button class="ghost" onclick="changeAmt('${x.id}')">${t('changeAmt')}</button><button class="bad" onclick="delEntry('${x.id}')">${t('del')}</button>`;
-  } else if (isMgr) {
-    acts = `<button class="ok" onclick="approve('${x.id}')">${t('approve')}</button><button class="warn" onclick="needFix('${x.id}')">${t('askFix')}</button>`
-      + `<button class="ghost" onclick="changeAmt('${x.id}')">${t('changeAmt')}</button><button class="bad" onclick="delEntry('${x.id}')">${t('del')}</button>`;
+  } else if (locked) {
+    acts = lockTxt + mgrEdit;
   } else {
-    acts = `<button class="ghost" onclick="startEdit('${x.id}')">${t('edit')}</button><button class="bad" onclick="delEntry('${x.id}')">${t('del')}</button>`;
+    acts = `<button class="ok" onclick="approve('${x.id}')">${t('approve')}</button><button class="warn" onclick="needFix('${x.id}')">${t('askFix')}</button>` + mgrEdit;
   }
   const who = (isMgr || !mine) ? `<div class="sub">${esc(nameOf(x.memberEmail))}</div>` : '';
   const rs = x.status === 'needs_fix' && x.reason ? `<div style="color:var(--warn);font-size:12.5px;margin-top:4px">${t('reason')}: ${esc(x.reason)}</div>` : '';
@@ -937,7 +940,7 @@ async function saveEntry() {
       }
     } else {
       // entry first (the slip rule checks that the entry exists), then the photo
-      const ref = await db.collection('entries').add({ memberEmail: me, date, amount: amt, note, status: 'submitted', reason: '', createdAt: Date.now() });
+      const ref = await db.collection('entries').add({ memberEmail: me, date, amount: amt, note, status: isMgr ? 'approved' : 'submitted', reason: '', createdAt: Date.now() });
       try {
         await db.collection('slips').doc(ref.id).set({ data: photo });
         slipCache[ref.id] = photo;
